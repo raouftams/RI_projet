@@ -2,7 +2,7 @@ import pickle
 import math
 
 # ouverture du fichier stopwords_fr
-stopwordsfile = "cacm/common_words"
+stopwordsfile = "../cacm/common_words"
 # Récupération de la liste des mots vides
 stopwords_list = open(stopwordsfile, "r", encoding="utf-8").read().splitlines()
 
@@ -92,7 +92,7 @@ def create_inverse_file_by_weight(inverse_file_by_freq_path, inverse_file_path):
     inverse_file = openPkl(inverse_file_path)
     inverse_file_by_weight = {}
     for term in inverse_file_by_freq.keys():
-        term_weights = []
+        term_weights = {}
         #count documents in which term appears
         nb_doc_term = len(inverse_file_by_freq[term])
         #docuemnts number
@@ -101,7 +101,7 @@ def create_inverse_file_by_weight(inverse_file_by_freq_path, inverse_file_path):
         for doc in inverse_file_by_freq[term]:
             docno = doc[0]
             weight = (doc[1]/doc[1]) * math.log10((nb_doc/nb_doc_term)+1)
-            term_weights.append((docno, weight))
+            term_weights[docno] = weight
 
         inverse_file_by_weight[term] = term_weights
     return inverse_file_by_weight    
@@ -114,6 +114,79 @@ def get_doc_freq(inverse_file_path, docno):
 #1.3.2 cette fonction retourne la frequence d'un terme donné dans chaque document
 def get_term_freq(inverse_file_by_freq_path, term):
     return openPkl(inverse_file_by_freq_path)[term]
+
+
+"""Modèle booléen"""
+def eliminate_logical_operators(request):
+    return request.replace("and", " ").replace("or", " ").replace("not", " ").replace("(", " ").replace(")", " ")
+
+def replace_logical_by_mathematical_operators(request):
+    request = request.replace("and", "*").replace("or", "+")
+    partitioned_request = list(request.partition("not"))
+    for i in range(0, len(partitioned_request)-1):
+        if partitioned_request[i] == "not":
+            partitioned_request[i] = "int(not"
+            partitioned_request[i+1] = partitioned_request[i+1] + ")"
+    
+    temp_request = ""
+    for i in range(0, len(partitioned_request)):
+        temp_request += partitioned_request[i]
+    return temp_request
+
+def create_boolean_model(inverse_file_path, request:str):
+    request = request.lower()
+    transformed_request = eliminate_logical_operators(request)
+    request_list = transformed_request.split(" ")
+    inverse_file = openPkl(inverse_file_path)
+    termes_in_doc = {}
+    pertinent_docs = []
+    for doc in inverse_file:
+        for term in request_list:
+            if term not in doc[1].keys():
+                termes_in_doc[term] = 0
+            else:
+                termes_in_doc[term] = 1
+
+
+        temp_request = request
+        for term in termes_in_doc.keys():
+            if term != "":
+                temp_request = temp_request.replace(term, str(termes_in_doc[term]))
+        
+        if eval(replace_logical_by_mathematical_operators(temp_request)):
+            pertinent_docs.append(doc[0])
+
+    return pertinent_docs
+
+"""Modèle vectoriel"""
+def create_vectorial_model(inverse_file_by_weight_path, inverse_file_path, request:str):
+    request = request.lower()
+    request_list = Stopword_elimination(request) 
+    inverse_file_by_weight = openPkl(inverse_file_by_weight_path)
+    inverse_file = openPkl(inverse_file_path)
+    request_vector = {}
+    pertinent_document = []
+    for term in inverse_file_by_weight.keys():
+        if term in request_list:
+            request_vector[term] = 1
+        else:
+            request_vector[term] = 0
+    
+    for doc in inverse_file:
+        request_weight_in_doc = 0
+        for term in request_vector.keys():
+            if term in doc[1].keys():
+                request_weight_in_doc += inverse_file_by_weight[term][doc[0]] * request_vector[term]
+        
+        if request_weight_in_doc > 0:
+            pertinent_document.append((doc[0], request_weight_in_doc))
+
+    return pertinent_document
+
+                
+    
+
+
 
 def main():
     """
@@ -129,17 +202,21 @@ def main():
         file.write(str(inverse_file))
         savePkl(inverse_file_by_freq,"inversefilebyfreq.pkl","out/")
     """
-    inverse_file_by_weight = create_inverse_file_by_weight("out/inversefilebyfreq.pkl","out/inversefile.pkl")
-    with open("out/inversefilebyweight", "w", encoding="utf-8") as file:
+    inverse_file_by_weight = create_inverse_file_by_weight("../out/inversefilebyfreq.pkl","../out/inversefile.pkl")
+    with open("../out/inversefilebyweight", "w", encoding="utf-8") as file:
         file.write(str(inverse_file_by_weight))
-        savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "out/")
-
-    print(get_doc_freq("out/inversefile.pkl", 146))
-    print(len(get_term_freq("out/inversefilebyfreq.pkl","report")))
-    print("------------------------------")
-    print(inverse_file_by_weight["report"])
-    print("c bon")
-
-
+        savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "../out/")
+    #print(create_inverse_file("../cacm/cacm.all"))
+    print(len(get_term_freq("../out/inversefilebyfreq.pkl", "computer")))
+    print(len(create_boolean_model("../out/inversefile.pkl", "(computer or key)")))
+    print(len(create_boolean_model("../out/inversefile.pkl", "key")))
+    print("-------------------------------------------------------------")
+    print(openPkl("../out/inversefilebyweight.pkl")["computer"]["3204"])
+    print(openPkl("../out/inversefilebyweight.pkl")["monica"]["3204"])
+    print("-------------------------------------------------------------")
+    print(create_vectorial_model("../out/inversefilebyweight.pkl", "../out/inversefile.pkl", "computer key monica"))
+    #print(create_inverse_file_by_weight("../out/inversefilebyfreq.pkl", "../out/inversefile.pkl")["computer"]["4"])
+    
 if __name__ == "__main__":
     main()
+
