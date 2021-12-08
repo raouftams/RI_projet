@@ -1,8 +1,9 @@
 import pickle
 import math
+from tqdm import tqdm
 
 # ouverture du fichier stopwords_fr
-stopwordsfile = "../cacm/common_words"
+stopwordsfile = "cacm/common_words"
 # Récupération de la liste des mots vides
 stopwords_list = open(stopwordsfile, "r", encoding="utf-8").read().splitlines()
 
@@ -154,38 +155,117 @@ def create_boolean_model(inverse_file_path, request:str):
                 temp_request = temp_request.replace(term, str(termes_in_doc[term]))
         
         if eval(replace_logical_by_mathematical_operators(temp_request)):
-            pertinent_docs.append(doc[0])
+            pertinent_docs.append([doc[0], len(doc[1].keys())])
 
     return pertinent_docs
 
 """Modèle vectoriel"""
-def create_vectorial_model(inverse_file_by_weight_path, inverse_file_path, request:str):
+
+#calcul avec méthode de produit interne
+def intern_product(inverse_file,inverse_file_by_weight, request_vector):
+    pertinent_docs = {}
+    for doc in inverse_file:
+        request_weight_in_doc = 0
+        doc_number = doc[0]
+        for term in request_vector:
+            if term in doc[1].keys():
+                request_weight_in_doc += inverse_file_by_weight[term][doc_number] * request_vector[term]
+        
+        if request_weight_in_doc > 0:
+            pertinent_docs[doc_number] = request_weight_in_doc
+    
+    pertinent_docs = dict(sorted(pertinent_docs.items(), key=lambda item: item[1], reverse=True))
+    return pertinent_docs
+
+#calcul avec coefficient de dice
+def dice_coefficient(inverse_file,inverse_file_by_weight, request_vector):
+    pertinent_docs = {}
+    for doc in inverse_file:
+        request_weight_in_doc = 0
+        wij_square = 0
+        wiq_square = 0
+        doc_number = doc[0]
+        for term in request_vector:
+            if term in doc[1].keys():
+                request_weight_in_doc += inverse_file_by_weight[term][doc_number] * request_vector[term]
+                wij_square += inverse_file_by_weight[term][doc[0]] ** 2
+                wiq_square += request_vector[term] ** 2
+
+        if request_weight_in_doc > 0:
+            pertinent_docs[doc_number] = (2*request_weight_in_doc)/(wij_square + wiq_square)
+    
+    pertinent_docs = dict(sorted(pertinent_docs.items(), key=lambda item: item[1], reverse=True))
+    return pertinent_docs
+
+#calcul avec mesure de cosinus
+def mesure_cosinus(inverse_file,inverse_file_by_weight, request_vector):
+    pertinent_docs = {}
+    for doc in inverse_file:
+        request_weight_in_doc = 0
+        wij_square = 0
+        wiq_square = 0
+        doc_number = doc[0]
+        for term in request_vector:
+            if term in doc[1].keys():
+                request_weight_in_doc += inverse_file_by_weight[term][doc_number] * request_vector[term]
+                wij_square += inverse_file_by_weight[term][doc[0]] ** 2
+                wiq_square += request_vector[term] ** 2
+
+        if request_weight_in_doc > 0:
+            pertinent_docs[doc_number] = request_weight_in_doc/math.sqrt(wij_square * wiq_square)
+    
+    pertinent_docs = dict(sorted(pertinent_docs.items(), key=lambda item: item[1], reverse=True))
+    return pertinent_docs
+
+#calcul avec mesure jaccard
+def mesure_jaccard(inverse_file,inverse_file_by_weight, request_vector):
+    pertinent_docs = {}
+    for doc in inverse_file:
+        request_weight_in_doc = 0
+        wij_square = 0
+        wiq_square = 0
+        doc_number = doc[0]
+        for term in request_vector:
+            if term in doc[1].keys():
+                request_weight_in_doc += inverse_file_by_weight[term][doc_number] * request_vector[term]
+                wij_square += inverse_file_by_weight[term][doc[0]] ** 2
+                wiq_square += request_vector[term] ** 2
+
+        if request_weight_in_doc > 0:
+            pertinent_docs[doc_number] = request_weight_in_doc/(wij_square + wiq_square - request_weight_in_doc)
+    
+    pertinent_docs = dict(sorted(pertinent_docs.items(), key=lambda item: item[1], reverse=True))
+    return pertinent_docs
+
+
+def create_vectorial_model(inverse_file_by_weight_path, inverse_file_path, request:str, method = 1):
+    """
+        method: la méthode utilisée pour calculer les poids
+            1- produit intern
+            2- coef de dice
+            3- mesure du cosinus
+            4- mesure Jaccard
+    """
     request = request.lower()
     request_list = Stopword_elimination(request) 
     inverse_file_by_weight = openPkl(inverse_file_by_weight_path)
     inverse_file = openPkl(inverse_file_path)
     request_vector = {}
-    pertinent_document = []
     for term in inverse_file_by_weight.keys():
         if term in request_list:
             request_vector[term] = 1
-        else:
-            request_vector[term] = 0
     
-    for doc in inverse_file:
-        request_weight_in_doc = 0
-        for term in request_vector.keys():
-            if term in doc[1].keys():
-                request_weight_in_doc += inverse_file_by_weight[term][doc[0]] * request_vector[term]
-        
-        if request_weight_in_doc > 0:
-            pertinent_document.append((doc[0], request_weight_in_doc))
+    if method == 2:
+        return dice_coefficient(inverse_file, inverse_file_by_weight, request_vector)
+    
+    if method == 3:
+        return mesure_cosinus(inverse_file, inverse_file_by_weight, request_vector)
+    
+    if method == 4:
+        return mesure_jaccard(inverse_file, inverse_file_by_weight, request_vector)
 
-    return pertinent_document
-
+    return intern_product(inverse_file, inverse_file_by_weight, request_vector)
                 
-    
-
 
 
 def main():
@@ -202,19 +282,19 @@ def main():
         file.write(str(inverse_file))
         savePkl(inverse_file_by_freq,"inversefilebyfreq.pkl","out/")
     """
-    inverse_file_by_weight = create_inverse_file_by_weight("../out/inversefilebyfreq.pkl","../out/inversefile.pkl")
-    with open("../out/inversefilebyweight", "w", encoding="utf-8") as file:
+    inverse_file_by_weight = create_inverse_file_by_weight("out/inversefilebyfreq.pkl","out/inversefile.pkl")
+    with open("out/inversefilebyweight", "w", encoding="utf-8") as file:
         file.write(str(inverse_file_by_weight))
-        savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "../out/")
+        savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "out/")
     #print(create_inverse_file("../cacm/cacm.all"))
-    print(len(get_term_freq("../out/inversefilebyfreq.pkl", "computer")))
-    print(len(create_boolean_model("../out/inversefile.pkl", "(computer or key)")))
-    print(len(create_boolean_model("../out/inversefile.pkl", "key")))
+    print(len(get_term_freq("out/inversefilebyfreq.pkl", "computer")))
+    print(len(create_boolean_model("out/inversefile.pkl", "(computer or key)")))
+    print(len(create_boolean_model("out/inversefile.pkl", "key")))
     print("-------------------------------------------------------------")
-    print(openPkl("../out/inversefilebyweight.pkl")["computer"]["3204"])
-    print(openPkl("../out/inversefilebyweight.pkl")["monica"]["3204"])
+    print(openPkl("out/inversefilebyweight.pkl")["computer"]["3204"])
+    print(openPkl("out/inversefilebyweight.pkl")["monica"]["3204"])
     print("-------------------------------------------------------------")
-    print(create_vectorial_model("../out/inversefilebyweight.pkl", "../out/inversefile.pkl", "computer key monica"))
+    print(create_vectorial_model("out/inversefilebyweight.pkl", "out/inversefile.pkl", "computer key monica", 4))
     #print(create_inverse_file_by_weight("../out/inversefilebyfreq.pkl", "../out/inversefile.pkl")["computer"]["4"])
     
 if __name__ == "__main__":
