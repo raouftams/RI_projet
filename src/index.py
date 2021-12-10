@@ -110,11 +110,19 @@ def create_inverse_file_by_weight(inverse_file_by_freq_path, inverse_file_path):
 #1.3 Fonction d'acces
 # 1.3.1 cette fonction retourne la liste des termes et leurs fréquences dans un document donné
 def get_doc_freq(inverse_file_path, docno):
-    return openPkl(inverse_file_path)[docno-1][1]
+    inverse_file = openPkl(inverse_file_path)
+    if docno-1 < len(inverse_file):
+        return inverse_file[docno-1][1]
+    
+    return None
 
 #1.3.2 cette fonction retourne la frequence d'un terme donné dans chaque document
 def get_term_freq(inverse_file_by_freq_path, term):
-    return openPkl(inverse_file_by_freq_path)[term]
+    inverse_file_by_freq = openPkl(inverse_file_by_freq_path)
+    if term in inverse_file_by_freq.keys():
+        return inverse_file_by_freq[term]
+    
+    return None
 
 
 """Modèle booléen"""
@@ -281,11 +289,12 @@ def main():
     with open ("out/inversefilebyfreq","w",encoding="utf-8") as file:
         file.write(str(inverse_file))
         savePkl(inverse_file_by_freq,"inversefilebyfreq.pkl","out/")
-    """
+    
     inverse_file_by_weight = create_inverse_file_by_weight("out/inversefilebyfreq.pkl","out/inversefile.pkl")
     with open("out/inversefilebyweight", "w", encoding="utf-8") as file:
         file.write(str(inverse_file_by_weight))
         savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "out/")
+    """
     #print(create_inverse_file("../cacm/cacm.all"))
     print(len(get_term_freq("out/inversefilebyfreq.pkl", "computer")))
     print(len(create_boolean_model("out/inversefile.pkl", "(computer or key)")))
