@@ -274,6 +274,50 @@ def create_vectorial_model(inverse_file_by_weight_path, inverse_file_path, reque
 
     return intern_product(inverse_file, inverse_file_by_weight, request_vector)
                 
+"""---------------------Evaluation-----------------------"""
+def list_to_string(list):
+    string = ""
+    for item in list:
+        string += str(item) + " "
+    return string
+
+def read_query(query_file_path):
+    queries = {}
+    with open(query_file_path, 'r', encoding="utf_8") as file:
+        lines = file.read().splitlines()
+        i = 0
+        query = ""
+        while i < len(lines):
+            line = lines[i]
+            if line.startswith(".I"):
+                query_nb = line.split()[1]
+            if line.startswith(".W"):
+                query = ""
+                j = i + 1
+                while not line.startswith('.N'):
+                    if(j < len(lines)):
+                        query += lines[j] + " "
+                        line = lines[j]
+                        j += 1
+                i = j
+            if line.startswith(".N"):
+                queries[query_nb] = list_to_string(Stopword_elimination(query))
+            i += 1
+    return queries
+
+def read_qrels(qrels_file_path):
+    queries = {}
+    with open(qrels_file_path, "r", encoding="utf_8") as file:
+        lines = file.read().splitlines()
+        for line in lines:
+            line_list = line.split(" ")
+            query_nb = line_list[0]
+            if query_nb not in queries.keys():
+                queries[query_nb] = []
+            queries[query_nb].append(line_list[1])
+    
+    return queries
+        
 
 
 def main():
@@ -294,7 +338,7 @@ def main():
     with open("out/inversefilebyweight", "w", encoding="utf-8") as file:
         file.write(str(inverse_file_by_weight))
         savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "out/")
-    """
+    
     #print(create_inverse_file("../cacm/cacm.all"))
     print(len(get_term_freq("out/inversefilebyfreq.pkl", "computer")))
     print(len(create_boolean_model("out/inversefile.pkl", "(computer or key)")))
@@ -305,7 +349,35 @@ def main():
     print("-------------------------------------------------------------")
     print(create_vectorial_model("out/inversefilebyweight.pkl", "out/inversefile.pkl", "computer key monica", 4))
     #print(create_inverse_file_by_weight("../out/inversefilebyfreq.pkl", "../out/inversefile.pkl")["computer"]["4"])
+    """
+
     
+    requests = read_query("cacm/query.text")
+    pertinent_docs = read_qrels("cacm/qrels.text")
+
+    for i in range(1, 5):
+        rappel = 0
+        precision = 0
+        nb_selected_pertinent_docs = 0
+        nb_selcted_docs = 0
+
+        vectorial_pertinent_docs = create_vectorial_model("out/inversefilebyweight.pkl", "out/inversefile.pkl", requests["10"], i)
+        temp_list = vectorial_pertinent_docs.values()
+        max_value = max(temp_list)
+
+        for item in vectorial_pertinent_docs.items():
+            if item[1] == max_value:
+                nb_selcted_docs += 1
+                if item[0] in pertinent_docs["10"]:
+                    nb_selected_pertinent_docs += 1
+
+        rappel = nb_selected_pertinent_docs / len(pertinent_docs["10"])
+        precision = nb_selected_pertinent_docs / nb_selcted_docs
+    
+        print(str(i) + ": " + str(rappel) + "/" + str(precision))
+        
+
+
 if __name__ == "__main__":
     main()
 
