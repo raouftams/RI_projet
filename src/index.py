@@ -354,28 +354,39 @@ def main():
     
     requests = read_query("cacm/query.text")
     pertinent_docs = read_qrels("cacm/qrels.text")
+    results = {}
+    for request in requests.items():
+        result = []
+        for i in range(1, 5):
+            rappel = 0
+            precision = 0
+            nb_selected_pertinent_docs = 0
+            nb_selcted_docs = 0
 
-    for i in range(1, 5):
-        rappel = 0
-        precision = 0
-        nb_selected_pertinent_docs = 0
-        nb_selcted_docs = 0
+            vectorial_pertinent_docs = create_vectorial_model("out/inversefilebyweight.pkl", "out/inversefile.pkl", request[1], i)
+            temp_list = vectorial_pertinent_docs.values()
+            max_value = max(temp_list)
 
-        vectorial_pertinent_docs = create_vectorial_model("out/inversefilebyweight.pkl", "out/inversefile.pkl", requests["10"], i)
-        temp_list = vectorial_pertinent_docs.values()
-        max_value = max(temp_list)
+            if int(request[0]) < 10:
+                key = str("0"+request[0])
+            else:
+                key = request[0]
+            
+            if key in pertinent_docs.keys():
+                for item in vectorial_pertinent_docs.items():
+                    #if item[1] == max_value:
+                    nb_selcted_docs += 1
+                    if item[0] in pertinent_docs[key]:
+                        nb_selected_pertinent_docs += 1
 
-        for item in vectorial_pertinent_docs.items():
-            if item[1] == max_value:
-                nb_selcted_docs += 1
-                if item[0] in pertinent_docs["10"]:
-                    nb_selected_pertinent_docs += 1
+                rappel = nb_selected_pertinent_docs / len(pertinent_docs["26"])
+                precision = nb_selected_pertinent_docs / nb_selcted_docs
 
-        rappel = nb_selected_pertinent_docs / len(pertinent_docs["10"])
-        precision = nb_selected_pertinent_docs / nb_selcted_docs
-    
-        print(str(i) + ": " + str(rappel) + "/" + str(precision))
+                result.append([rappel, precision])
         
+        results[request[0]] = result
+    print(results)
+            
 
 
 if __name__ == "__main__":
