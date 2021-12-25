@@ -304,7 +304,7 @@ def read_query(query_file_path):
                         line = lines[j]
                         j += 1
                 i = j
-            if line.startswith(".N"):
+            if line.startswith(".N") or line.startswith(".A"):
                 queries[query_nb] = list_to_string(Stopword_elimination(query))
             i += 1
     return queries
