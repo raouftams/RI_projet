@@ -101,7 +101,11 @@ def create_inverse_file_by_weight(inverse_file_by_freq_path, inverse_file_path):
         #calculate weight
         for doc in inverse_file_by_freq[term]:
             docno = doc[0]
-            weight = (doc[1]/doc[1]) * math.log10((nb_doc/nb_doc_term)+1)
+            #get maximum frequency of term in document
+            freqs_in_doc = inverse_file[int(docno)-1][1]
+            max_freq = max(freqs_in_doc.values())
+
+            weight = (doc[1]/max_freq) * math.log10((nb_doc/nb_doc_term)+1)
             term_weights[docno] = weight
 
         inverse_file_by_weight[term] = term_weights
@@ -317,8 +321,46 @@ def read_qrels(qrels_file_path):
             queries[query_nb].append(line_list[1])
     
     return queries
-        
 
+def evaluate(formule, method):
+    requests = read_query("cacm/query.text")
+    pertinent_docs = read_qrels("cacm/qrels.text")
+    results = {}
+    for request in requests.items():
+        result = []
+        rappel = 0
+        precision = 0
+        nb_selected_pertinent_docs = 0
+        nb_selcted_docs = 0  
+        vectorial_pertinent_docs = create_vectorial_model("out/inversefilebyweight.pkl", "out/inversefile.pkl", request[1], formule)
+            
+        if int(request[0]) < 10:
+            key = str("0"+request[0])
+        else:
+            key = request[0]
+
+        if key in pertinent_docs.keys():
+            i = 0
+            for item in vectorial_pertinent_docs.items():
+                if method == 1: #method = 1 means we are using threshhold and method = 0 means we are using the docs number
+                    if (item[1] > 1.3 and formule == 1) or (item[1] > 0.85 and formule == 2) or (item[1] > 0.95 and formule == 3) or (item[1] > 0.09 and formule == 4):
+                        nb_selcted_docs += 1
+                        if item[0] in pertinent_docs[key]:
+                            nb_selected_pertinent_docs += 1
+                else:
+                    if i <= 300:
+                        nb_selcted_docs += 1
+                        if item[0] in pertinent_docs[key]:
+                            nb_selected_pertinent_docs += 1
+                    i += 1
+                
+            rappel = nb_selected_pertinent_docs / len(pertinent_docs[key])
+            precision = nb_selected_pertinent_docs / nb_selcted_docs
+            result.append([rappel, precision])
+        
+        results[request[0]] = result
+
+    return results
 
 def main():
     """
@@ -333,8 +375,9 @@ def main():
     with open ("out/inversefilebyfreq","w",encoding="utf-8") as file:
         file.write(str(inverse_file))
         savePkl(inverse_file_by_freq,"inversefilebyfreq.pkl","out/")
-    
+
     inverse_file_by_weight = create_inverse_file_by_weight("out/inversefilebyfreq.pkl","out/inversefile.pkl")
+    print(inverse_file_by_weight)
     with open("out/inversefilebyweight", "w", encoding="utf-8") as file:
         file.write(str(inverse_file_by_weight))
         savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "out/")
@@ -349,9 +392,7 @@ def main():
     print("-------------------------------------------------------------")
     print(create_vectorial_model("out/inversefilebyweight.pkl", "out/inversefile.pkl", "computer key monica", 4))
     #print(create_inverse_file_by_weight("../out/inversefilebyfreq.pkl", "../out/inversefile.pkl")["computer"]["4"])
-    """
 
-    
     requests = read_query("cacm/query.text")
     pertinent_docs = read_qrels("cacm/qrels.text")
     results = {}
@@ -374,20 +415,25 @@ def main():
             
             if key in pertinent_docs.keys():
                 for item in vectorial_pertinent_docs.items():
-                    #if item[1] == max_value:
-                    nb_selcted_docs += 1
-                    if item[0] in pertinent_docs[key]:
-                        nb_selected_pertinent_docs += 1
+                    if (item[1] > 1.3 and i == 1) or (item[1] > 0.85 and i == 2) or (item[1] > 0.95 and i == 3) or (item[1] > 0.09 and i == 4):
+                        #if item[1] == max_value:
+                        nb_selcted_docs += 1
+                        if item[0] in pertinent_docs[key]:
+                            nb_selected_pertinent_docs += 1
+                    
 
-                rappel = nb_selected_pertinent_docs / len(pertinent_docs["26"])
+                rappel = nb_selected_pertinent_docs / len(pertinent_docs[key])
                 precision = nb_selected_pertinent_docs / nb_selcted_docs
 
                 result.append([rappel, precision])
         
         results[request[0]] = result
-    print(results)
-            
+    for item in results.items():
+        if item[1] != []:
+            print(item[1][2])
 
+    """
+    print(evaluate(1, 2))
 
 if __name__ == "__main__":
     main()

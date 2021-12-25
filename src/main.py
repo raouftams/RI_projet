@@ -11,6 +11,7 @@ class HomePage(QMainWindow):
         loadUi("src/ui/homepage.ui", self)
         self.boolean_model_action.clicked.connect(lambda: self.switch_to_boolean_model())
         self.vectorial_model_action.clicked.connect(lambda: self.switch_to_vectorial_model())
+        self.evaluation_action.clicked.connect(lambda: self.switch_to_evaluation())
         self.search_by_term_btn.clicked.connect(lambda: self.search_by_term())
         self.search_by_doc_btn.clicked.connect(lambda: self.search_by_doc())
 
@@ -19,6 +20,9 @@ class HomePage(QMainWindow):
     
     def switch_to_vectorial_model(self):
         widget.setCurrentIndex(2)
+    
+    def switch_to_evaluation(self):
+        widget.setCurrentIndex(3)
 
     def search_by_term(self):
         term = self.term_field.text()
@@ -60,6 +64,7 @@ class BooleanModel(QWidget):
         self.methodBox.setEnabled(False)
         self.base_functions_action.clicked.connect(lambda: self.switch_to_base_functions())
         self.vectorial_model_action.clicked.connect(lambda: self.switch_to_vectorial_model())
+        self.evaluation_action.clicked.connect(lambda: self.switch_to_evaluation())
         self.sendRequestBtn.clicked.connect(lambda: self.send_request())
         
     def switch_to_base_functions(self):
@@ -67,6 +72,9 @@ class BooleanModel(QWidget):
     
     def switch_to_vectorial_model(self):
         widget.setCurrentIndex(2)
+    
+    def switch_to_evaluation(self):
+        widget.setCurrentIndex(3)
 
     def send_request(self):
         request = self.requestField.toPlainText()
@@ -96,6 +104,7 @@ class VectorialModel(QWidget):
         self.methodBox.addItem("jaccard")
         self.base_functions_action.clicked.connect(lambda: self.switch_to_base_functions())
         self.boolean_model_action.clicked.connect(lambda: self.switch_to_boolean_model())
+        self.evaluation_action.clicked.connect(lambda: self.switch_to_evaluation())
         self.sendRequestBtn.clicked.connect(lambda: self.send_request())
         
     def switch_to_base_functions(self):
@@ -103,6 +112,9 @@ class VectorialModel(QWidget):
     
     def switch_to_boolean_model(self):
         widget.setCurrentIndex(1)
+    
+    def switch_to_evaluation(self):
+        widget.setCurrentIndex(3)
 
     def send_request(self):
         request = self.requestField.toPlainText()
@@ -131,6 +143,58 @@ class VectorialModel(QWidget):
     def set_info_text(self, text):
         self.info_label.setText(text)
         self.info_label.adjustSize()
+
+
+class Evaluation(QWidget):
+    def __init__(self):
+        super(Evaluation, self).__init__()
+        loadUi("src/ui/evaluation.ui", self)
+        self.formule_box.setEnabled(True)
+        self.formule_box.addItem("produit interne")
+        self.formule_box.addItem("coefficient de dice")
+        self.formule_box.addItem("cosinus")
+        self.formule_box.addItem("jaccard")
+        self.threshhold_method.setChecked(True)
+        self.nb_docs_method.setChecked(False)
+        self.base_functions_action.clicked.connect(lambda: self.switch_to_base_functions())
+        self.boolean_model_action.clicked.connect(lambda: self.switch_to_boolean_model())
+        self.vectorial_model_action.clicked.connect(lambda: self.switch_to_vectorial_model())
+        self.evaluate_btn.clicked.connect(lambda: self.evaluate())
+        
+    def switch_to_base_functions(self):
+        widget.setCurrentIndex(0)
+    
+    def switch_to_boolean_model(self):
+        widget.setCurrentIndex(1)
+    
+    def switch_to_vectorial_model(self):
+        widget.setCurrentIndex(2)
+
+    def evaluate(self):
+        formule = 1
+        method = 0
+        if str(self.formule_box.currentText()) == "coefficient de dice":
+            formule = 2
+        if str(self.formule_box.currentText()) == "cosinus":
+            formule = 3
+        if str(self.formule_box.currentText()) == "jaccard":
+            formule = 4
+        
+        if self.threshhold_method.isChecked():
+            method = 1
+        if self.nb_docs_method.isChecked():
+            method = 2
+        
+        results = evaluate(formule, method)
+        data = []
+        if len(results) != 0:
+            for item in results.items():
+                data.append([item[0], list_to_string(item[1])])
+            header = ["Requête", "Rappel, précision"]
+            self.resultTable.setModel(TableModel(data, header))
+
+    
+
 
 class TableModel(QAbstractTableModel):
     def __init__(self, data, header):
@@ -166,10 +230,12 @@ app = QApplication(sys.argv)
 main_window = HomePage()
 boolean_model_window = BooleanModel()
 vectorial_model_window = VectorialModel()
+evaluation_window = Evaluation()
 widget = QStackedWidget()
 widget.addWidget(main_window)
 widget.addWidget(boolean_model_window)
 widget.addWidget(vectorial_model_window)
+widget.addWidget(evaluation_window)
 widget.setFixedHeight(600)
 widget.setFixedWidth(800)
 widget.show()

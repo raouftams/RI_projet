@@ -231,6 +231,19 @@
      <string>Modèle vectoriel</string>
     </property>
    </widget>
+   <widget class="QPushButton" name="evaluation_action">
+    <property name="geometry">
+     <rect>
+      <x>400</x>
+      <y>10</y>
+      <width>111</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Evaluation</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="action_accueil">
