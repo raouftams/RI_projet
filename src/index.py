@@ -1,6 +1,11 @@
 import pickle
 import math
+import json
 from tqdm import tqdm
+import time
+
+def current_milli_time():
+    return round(time.time() * 1000)
 
 # ouverture du fichier stopwords_fr
 stopwordsfile = "cacm/common_words"
@@ -50,6 +55,7 @@ def create_inverse_file(path):
         lines = file.read().splitlines()
         i = 0
         while i < len(lines):
+            text = ""
             line = lines[i]
             if line.startswith(".I"):
                 docno = line.split()[1]
@@ -65,10 +71,10 @@ def create_inverse_file(path):
                         j += 1
                 i = j
             if line.startswith(".B"):
-                doc_text = title + text
+                doc_text = title + " " + text
                 word_list = Stopword_elimination(doc_text)
                 frequence_dict = dict_freq(word_list)
-                doc_freq_list.append((docno, frequence_dict))
+                doc_freq_list.append([docno, frequence_dict])
             
             i += 1
     file.close()
@@ -131,25 +137,35 @@ def get_term_freq(inverse_file_by_freq_path, term):
 
 """Modèle booléen"""
 def eliminate_logical_operators(request):
-    return request.replace("and", " ").replace("or", " ").replace("not", " ").replace("(", " ").replace(")", " ")
+    return request.replace(" and ", " ").replace(" or ", " ").replace(" not", " ").replace("(", " ").replace(")", " ")
 
 def replace_logical_by_mathematical_operators(request):
-    request = request.replace("and", "*").replace("or", "+")
+    request = request.replace(" and ", "*").replace(" or ", "+")
     partitioned_request = list(request.partition("not"))
     for i in range(0, len(partitioned_request)-1):
         if partitioned_request[i] == "not":
-            partitioned_request[i] = "int(not"
-            partitioned_request[i+1] = partitioned_request[i+1] + ")"
-    
+            split = partitioned_request[i+1].split("*")
+            if len(split) != 1:
+                partitioned_request[i] = "int(not"
+                partitioned_request[i+1] = split[0] + ")" + "*" + split[1]
+
+            else:
+                split = partitioned_request[i+1].split("+")
+                partitioned_request[i] = "int(not"
+                partitioned_request[i+1] = split[0] + ")" + "+" + split[1]
+
+
     temp_request = ""
     for i in range(0, len(partitioned_request)):
-        temp_request += partitioned_request[i]
+        if i != partitioned_request[len(partitioned_request)-1]:
+            temp_request += partitioned_request[i]
     return temp_request
 
 def create_boolean_model(inverse_file_path, request:str):
     request = request.lower()
     transformed_request = eliminate_logical_operators(request)
-    request_list = transformed_request.split(" ")
+    temp_request_list = transformed_request.split(" ")
+    request_list = remove_vide(temp_request_list)
     inverse_file = openPkl(inverse_file_path)
     termes_in_doc = {}
     pertinent_docs = []
@@ -159,17 +175,26 @@ def create_boolean_model(inverse_file_path, request:str):
                 termes_in_doc[term] = 0
             else:
                 termes_in_doc[term] = 1
-
-
+        termes_in_doc = dict(sorted(termes_in_doc.items(), key=lambda item: len(item[0]), reverse=True))
         temp_request = request
         for term in termes_in_doc.keys():
             if term != "":
                 temp_request = temp_request.replace(term, str(termes_in_doc[term]))
         
-        if eval(replace_logical_by_mathematical_operators(temp_request)):
+        
+        if eval(replace_logical_by_mathematical_operators(temp_request)) > 0 :
             pertinent_docs.append([doc[0], len(doc[1].keys())])
-
+    
     return pertinent_docs
+
+
+def remove_vide(request):
+    new_request = []
+    for i in range(len(request)):
+        if request[i] != "":
+            new_request.append(request[i])
+    
+    return new_request
 
 """Modèle vectoriel"""
 
@@ -322,7 +347,7 @@ def read_qrels(qrels_file_path):
     
     return queries
 
-def evaluate(formule, method):
+def evaluate(formule, method, seuil, nb_docs):
     requests = read_query("cacm/query.text")
     pertinent_docs = read_qrels("cacm/qrels.text")
     results = {}
@@ -343,16 +368,24 @@ def evaluate(formule, method):
             i = 0
             for item in vectorial_pertinent_docs.items():
                 if method == 1: #method = 1 means we are using threshhold and method = 0 means we are using the docs number
-                    if (item[1] > 1.3 and formule == 1) or (item[1] > 0.85 and formule == 2) or (item[1] > 0.95 and formule == 3) or (item[1] > 0.09 and formule == 4):
+                    if (item[1] > seuil):
                         nb_selcted_docs += 1
                         if item[0] in pertinent_docs[key]:
                             nb_selected_pertinent_docs += 1
-                else:
-                    if i <= 300:
+                elif method == 2:
+                    if i <= 800:
                         nb_selcted_docs += 1
                         if item[0] in pertinent_docs[key]:
                             nb_selected_pertinent_docs += 1
                     i += 1
+                else:
+                    if i <= nb_docs:
+                        if (item[1] >= seuil):
+                            nb_selcted_docs += 1
+                            if item[0] in pertinent_docs[key]:
+                                nb_selected_pertinent_docs += 1
+                            i += 1
+
                 
             rappel = nb_selected_pertinent_docs / len(pertinent_docs[key])
             precision = nb_selected_pertinent_docs / nb_selcted_docs
@@ -363,25 +396,45 @@ def evaluate(formule, method):
     return results
 
 def main():
-    """
+    
+    begin = current_milli_time()
     inverse_file = create_inverse_file("cacm/cacm.all")
+    end = current_milli_time()
+    print((end-begin)/1000)
+    
     # save inverse file
     with open ("out/inversefile","w",encoding="utf-8") as file:
         file.write(str(inverse_file))
         savePkl(inverse_file,"inversefile.pkl","out/")
-
+        
+    
+    begin = current_milli_time()
     inverse_file_by_freq = create_inverse_file_by_freq(inverse_file)
+    end = current_milli_time()
+    print((end-begin)/1000)
+
     # save inverse file by freq
     with open ("out/inversefilebyfreq","w",encoding="utf-8") as file:
         file.write(str(inverse_file))
         savePkl(inverse_file_by_freq,"inversefilebyfreq.pkl","out/")
-
+    
+    inverse_file_weight = openPkl("out/inversefilebyweight.pkl")
+    inverse_file_freq = openPkl("out/inversefilebyfreq.pkl")
+    inverse_file = openPkl("out/inversefile.pkl")
+    print(len(inverse_file))
+    print(len(inverse_file_freq))
+    print(len(inverse_file_weight))
+    
+    begin = current_milli_time()
     inverse_file_by_weight = create_inverse_file_by_weight("out/inversefilebyfreq.pkl","out/inversefile.pkl")
+    end = current_milli_time()
+    print((end-begin)/1000)
+    
     print(inverse_file_by_weight)
     with open("out/inversefilebyweight", "w", encoding="utf-8") as file:
         file.write(str(inverse_file_by_weight))
         savePkl(inverse_file_by_weight, "inversefilebyweight.pkl", "out/")
-    
+    """
     #print(create_inverse_file("../cacm/cacm.all"))
     print(len(get_term_freq("out/inversefilebyfreq.pkl", "computer")))
     print(len(create_boolean_model("out/inversefile.pkl", "(computer or key)")))
@@ -432,8 +485,22 @@ def main():
         if item[1] != []:
             print(item[1][2])
 
-    """
-    print(evaluate(1, 2))
+    
+    seuil = [1.3, 0.85, 0.9, 0.09]
+    formule = ["produit interne", "coef dice", "cosinus", "jaccard"]
+    for i in range(1, 5):
+        s = i
+        result = evaluate(i, 1, seuil[i-1], 0)
+        rappel = 0
+        precision = 0
+        i = 0
+        for item in result.items():
+            if item[1] != []:
+                rappel += item[1][0][0]
+                precision += item[1][0][1]
+                i += 1
+        print(formule[s-1] + ": [" + str(rappel/i) + "," + str(precision/i) + "]")
+    """    
 
 if __name__ == "__main__":
     main()

@@ -5,6 +5,7 @@ from PyQt5.QtCore import QAbstractTableModel, Qt, pyqtSlot
 from index import *
 import sys
 
+
 class HomePage(QMainWindow):
     def __init__(self):
         super(HomePage, self).__init__()
@@ -172,20 +173,24 @@ class Evaluation(QWidget):
 
     def evaluate(self):
         formule = 1
+        seuil = 1.3
         method = 0
         if str(self.formule_box.currentText()) == "coefficient de dice":
             formule = 2
+            seuil = 0.85
         if str(self.formule_box.currentText()) == "cosinus":
             formule = 3
+            seuil = 0.9
         if str(self.formule_box.currentText()) == "jaccard":
             formule = 4
+            seuil = 0.09
         
         if self.threshhold_method.isChecked():
             method = 1
         if self.nb_docs_method.isChecked():
             method = 2
         
-        results = evaluate(formule, method)
+        results = evaluate(formule, method, seuil, 3204)
         data = []
         if len(results) != 0:
             for item in results.items():
